@@ -3,6 +3,7 @@ CPPFLAGS = -Isrc
 CFLAGS = -std=c17 -Wall -Wextra -Wpedantic -O2
 SOURCES = $(wildcard src/*.c)
 HEADERS = $(wildcard src/*.h)
+TESTS = tests/test_bitio tests/test_canonical tests/test_minheap tests/test_huffman_tree tests/test_huffman
 
 .PHONY: all debug test clean
 all: huffman
@@ -13,9 +14,11 @@ huffman: $(SOURCES) $(HEADERS) Makefile
 debug:
 	$(MAKE) huffman CFLAGS="-std=c17 -Wall -Wextra -Wpedantic -g -fsanitize=address,undefined -fno-pie" LDFLAGS="-fsanitize=address,undefined -no-pie" -B
 
-test:
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_huffman.c $(filter-out src/main.c,$(SOURCES)) $(LDFLAGS) -o tests/test_huffman
-	./tests/test_huffman
+test: $(TESTS)
+	@set -e; for test in $(TESTS); do ./$$test; done
+
+$(TESTS): tests/test_%: tests/test_%.c $(filter-out src/main.c,$(SOURCES)) $(HEADERS) Makefile
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(filter-out src/main.c,$(SOURCES)) $(LDFLAGS) -o $@
 
 clean:
-	rm -f huffman tests/test_huffman
+	rm -f huffman $(TESTS)

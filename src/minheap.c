@@ -1,12 +1,12 @@
 #include "minheap.h"
 
 static void swap_nodes(minheap *heap, size_t first, size_t second) {
-    node *temporary = heap->nodes[first];
+    huffman_node *temporary = heap->nodes[first];
     heap->nodes[first] = heap->nodes[second];
     heap->nodes[second] = temporary;
 }
 
-int heap_insert(minheap *heap, node *entry) {
+int heap_insert(minheap *heap, huffman_node *entry) {
     if (heap->size == SYMBOL_COUNT) {
         return -1;
     }
@@ -26,13 +26,13 @@ int heap_insert(minheap *heap, node *entry) {
     return 0;
 }
 
-node *heap_pop_top(minheap *heap) {
+huffman_node *heap_pop_top(minheap *heap) {
     if (heap->size == 0) {
         return NULL;
     }
 
     // Replace the smallest node with the last leaf and move it down as needed.
-    node *result = heap->nodes[0];
+    huffman_node *result = heap->nodes[0];
     heap->nodes[0] = heap->nodes[--heap->size];
     size_t index = 0;
     while (2 * index + 1 < heap->size) {

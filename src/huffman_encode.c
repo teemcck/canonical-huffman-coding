@@ -2,6 +2,7 @@
 #include "huffman_tree.h"
 #include "canonical.h"
 #include "bitio.h"
+#include "huffman_header.h"
 
 int huffman_encode(FILE *input, FILE *output) {
     if (input == NULL || output == NULL || input == output) {
@@ -33,63 +34,47 @@ int huffman_encode(FILE *input, FILE *output) {
     }
 
     // Build a min heap and merge the two smallest nodes until one tree remains.
-    node *root = NULL;
+    huffman_node *root = NULL;
     int status = build_huffman_tree(frequencies, &root);
     if (status != EXIT_SUCCESS) {
         return status;
     }
 
     // Create a lengths array indexed by symbol and build lengths from the tree.
-    uint8_t lengths[SYMBOL_COUNT] = {0};
-    build_code_lengths(root, lengths, 0);
+    uint8_t code_lengths[SYMBOL_COUNT] = {0};
+    build_code_lengths(root, code_lengths, 0);
 
     // Release the tree once its code lengths have been extracted.
     release_tree(root);
 
-    // Count how many symbols have each code length for the future limiter.
-    size_t length_counts[SYMBOL_COUNT] = {0};
-    for (size_t index = 0; index < SYMBOL_COUNT; ++index) {
-        if (lengths[index] != 0) {
-            ++length_counts[lengths[index]];
-        }
-    }
-
-    // Adjust the histogram and per-symbol lengths here before building codes.
-    status = limit_code_lengths(frequencies, lengths, length_counts);
+    // Apply the code length limit before building canonical codes.
+    status = limit_code_lengths(frequencies, code_lengths);
     if (status != EXIT_SUCCESS) {
         return status;
     }
 
     // Check that the final lengths form a valid, supported prefix code.
-    size_t counts[MAX_CODE_LEN + 1];
-    status = validate_code_lengths(lengths, counts);
+    size_t codes_per_length[MAX_CODE_LEN + 1];
+    status = validate_code_lengths(code_lengths, codes_per_length);
     if (status != EXIT_SUCCESS) {
         return status;
     }
 
     // Build a sorted array of symbol, length pairs.
-    symbol_length_pair pairs[SYMBOL_COUNT];
-    size_t code_count = build_sorted_symbol_length_pairs(pairs, lengths);
+    symbol_length_pair sorted_symbols[SYMBOL_COUNT];
+    size_t code_count = build_sorted_symbol_length_pairs(sorted_symbols, code_lengths);
 
     // Build canonical codes from the sorted symbol lengths.
     huffman_code codebook[SYMBOL_COUNT];
-    build_canonical_codes(codebook, pairs, code_count);
+    build_canonical_codes(codebook, sorted_symbols, code_count);
 
     // Reset the input stream to where frequency counting began.
     if (fsetpos(input, &start_position) != 0) {
         return EXIT_FAILURE;
     }
 
-    // Write code lengths and the total symbol count to the header.
-    // The count always uses four little-endian bytes, on every machine.
-    if (fwrite(lengths, 1, sizeof(lengths), output) != sizeof(lengths)) {
+    if (write_header(output, code_lengths, total_symbols) != EXIT_SUCCESS) {
         return EXIT_FAILURE;
-    }
-
-    for (unsigned byte = 0; byte < 4; ++byte) {
-        if (fputc((int)((total_symbols >> (8 * byte)) & 255), output) == EOF) {
-            return EXIT_FAILURE;
-        }
     }
 
     // The bit writer packs variable-length codes into output bytes.
@@ -104,7 +89,7 @@ int huffman_encode(FILE *input, FILE *output) {
         }
 
         huffman_code code = codebook[symbol];
-        if (bit_writer_write_bits(&writer, code.value, code.length) == EOF) {
+        if (bit_writer_write_bits(&writer, code.bits, code.length) == EOF) {
             return EXIT_FAILURE;
         }
     }
